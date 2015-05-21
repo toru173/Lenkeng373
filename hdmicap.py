@@ -25,14 +25,14 @@ TODO:
     - test on PPC, x86, x86_64, OS X, *nix, VMs etc. BECAUSE OF MKFIFO,
       WILL NOT RUN ON WINDOWS. Although investigation needed
     - General clean up
-    - more robust error handling
-    
+    - more robust error handling. OS Independant advice when unable to
+      import package.
     - move FIFO read/write pointer increment logic into try: except clause
         - when implemented results in odd sound synch errors?
     - add heartbeat_transmit code to send when heartbeart received from receiver
       rather than standalone thread
     - use framerate packet (received on port 2067) for frame pacing. only write frame to
-    - FIFO when this packet received.
+      FIFO when this packet received.
 '''
 
 from struct import *
