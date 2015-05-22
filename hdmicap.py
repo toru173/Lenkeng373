@@ -555,11 +555,11 @@ def main (argv) :
         transmitter_ip = '192.168.168.55'
 
     if "--receive" in argv :
-        print "--receive not yet implemented"
+        print "--receive not yet implemented. Default is the IP address of " + input_source
         quit()
 
     if "--recvmac" in argv :
-        print "--recvmac not yet implemented"
+        print "--recvmac not yet implemented. Default is hardcoded to 00:0B:78:00:60:01"
         quit()
 
 
