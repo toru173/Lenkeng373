@@ -179,7 +179,7 @@ def parse_packet (input_source, packet_type = None, fifo_location = None, delay_
         
         if delay_ms > 0:
             delay_packets = int((1000 / (48000/124)) * delay_ms)
-            # Write data package size - 16 byte header = 992 bytes
+            # Write data package size - 16 byte header = 992 bytes of '0x00'
             audio_delay_fifo = [('00'.decode('hex') * 992)] * (delay_packets + 1)
             
             audio_delay_fifo_top = delay_packets
@@ -187,7 +187,8 @@ def parse_packet (input_source, packet_type = None, fifo_location = None, delay_
             audio_delay_fifo_write_pointer = audio_delay_fifo_top
 
         else :
-            audio_delay_fifo = []
+            # Set FIFO to single frame size
+            audio_delay_fifo = [('00'.decode('hex') * 992)]
 
             audio_delay_fifo_top = 0
             audio_delay_fifo_read_pointer = 0
@@ -277,9 +278,9 @@ def parse_packet (input_source, packet_type = None, fifo_location = None, delay_
                     # AUDIO FORMAT NOTES FROM http://danman.eu/blog/?p=110
                     # Audio is signed 32 bit PCM, big endian, stereo, 48Khz with
                     # 16 bye header. Remove header, write remainder to internal FIFO
-                    # prepopulated with '0x00000000'. Once internal fifo full, write
+                    # prepopulated with '0x00'. Once internal fifo full, write
                     # to external fifo
-                    
+
                     audio_delay_fifo[audio_delay_fifo_write_pointer] = data[16 : ]
 
                     try:
@@ -459,11 +460,23 @@ def parse_packet (input_source, packet_type = None, fifo_location = None, delay_
 
 def main (argv) :
 
+    # Check for windows
+    if 'win' in sys.platform.lower() :
+        if sys.platform == 'darwin' :
+            # 'darwin' (OS X) is supported
+            pass
+        else :
+            # Result contains 'win' - probably windows something
+            sys.stderr.write("Windows is not supported at this time" + newline())
+            quit()
+
+
     # Argument Defaults:
     if sys.platform == 'darwin' :
         input_source = 'en0'
-    else :
+    else:
         input_source = 'eth0'
+
 
     video_fifo_location = "/tmp/videofifo"
     audio_fifo_location = "/tmp/audiofifo"
@@ -480,9 +493,9 @@ def main (argv) :
     
     if "--debug" in argv :
         try:
-            if argv[argv.index("--debug") + 1] == "2" :
+            if argv[argv.index("--debug") + 1] == "stats" :
                 debug_level = 2
-            if argv[argv.index("--debug") + 1] == "3" :
+            if argv[argv.index("--debug") + 1] == "heartbeat" :
                 debug_level = 3
             else:
                 debug_level = 1
@@ -535,6 +548,12 @@ def main (argv) :
         # Passes raw string. NEED TO IMPLEMENT ERROR CHECKING/HANDLING
         # SO AS NOT TO ALLOW MALFORMED PATH VARIABLE
         FFMPEG_BIN = argv[argv.index("--ffmpeg") + 1]
+
+    if "--ffmpegout" in argv :
+        # Passes raw strin to ffmpeg. NEED TO IMPLEMENT ERROR CHECKING/HANDLING
+        ffmpeg_output_string = argv[argv.index("--ffmpegout") + 1]
+    else:
+        ffmpeg_output_string = 'udp://127.0.0.1:5010?ttl=1'
 
 
     # CREATE TWO PIPES USING OS.MKFIFO(), WRITES INFORMATION TO FFMPEG. INCOMPATIBLE WITH WINDOWS
@@ -617,7 +636,7 @@ def main (argv) :
            '-f', 'mpegts',
            '-qscale:a', '1',
            '-qscale:v', '1',
-           'udp://127.0.0.1:5010?localaddr=10.0.0.1&ttl=1']
+           ffmpeg_output_string]
 
     if output_method == "audio" :
         audio_capture_thread.start()
