@@ -102,8 +102,9 @@ def args_help () :
            '    --receive   IP      Overide default receiver IP address' + newline() + \
            '    --ffmpeg    path    Path to FFmpeg' + newline() + \
            '    --ffmpegout args    Arguments to pass to FFmpeg' + newline() + \
+           '    --heartbeat         transmitts heartbeat on interface specified in --input. For standalone operation' + newline() + \
             newline() + \
-           ' Example: sudo python pycap.py --input en1 --delay 100 --receive 192.168.168.55'
+           'Example: sudo python pycap.py --input en1 --delay 100 --receive 192.168.168.55'
 
 
 def heartbeat_transmitter (TRANSMITTER_IP, RECEIVER_IP, HEARTBEAT_PORT, debug_level = None) :
