@@ -198,10 +198,10 @@ def parse_packet (input_source, packet_type = None, fifo_location = None, delay_
     if fifo_location :
         if debug_level is not None :
             sys.stderr.write("Attempting to open " + fifo_location + newline())
-        fifo = open(fifo_location, 'a')
+        fifo = open(fifo_location, 'w')
         
         if debug_level is not None :
-            sys.stderr.write("Successfully opened " + fifo_location + " for appending" + newline())
+            sys.stderr.write("Successfully opened " + fifo_location + " for writing" + newline())
 
 
     current_timestamp = 0
@@ -491,6 +491,17 @@ def main (argv) :
     for i in argv :
         argv[argv.index(i)] = argv[argv.index(i)].lower()
     
+    if "--help" in argv or \
+       "-help" in argv or \
+       "-h" in argv or \
+       "h" in argv or \
+       "--?" in argv or \
+       "-?" in argv or \
+       "?" in argv :
+        print args_help()
+        quit()
+
+    
     if "--debug" in argv :
         try:
             if argv[argv.index("--debug") + 1] == "stats" :
@@ -542,6 +553,14 @@ def main (argv) :
         transmitter_ip = argv[argv.index("--transmit") + 1]
     else :
         transmitter_ip = '192.168.168.55'
+
+    if "--receive" in argv :
+        print "--receive not yet implemented"
+        quit()
+
+    if "--recvmac" in argv :
+        print "--recvmac not yet implemented"
+        quit()
 
 
     if "--ffmpeg" in argv :
