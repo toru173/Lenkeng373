@@ -91,20 +91,21 @@ def args_help () :
     # Model after https://github.com/Jalle19/node-ffmpeg-mpegts-proxy
     return 'Requirements: Requires Pcapy and netifaces packages. Must be run as root.' + newline() + \
            'Incompatible with Windows' + newline() + \
-           'Usage: pcapy.py [--input I] [--output AV] [--delay MS]' + newline() + \
+           'Usage: hdmicapy.py [--input I] [--output AV] [--delay MS]' + newline() + \
            '                [--recvmac MAC] [--transmit IP] [--receive IP]' + newline() + \
            '                [--ffmpeg PATH] [--ffmpegout ARGS]' + newline() + \
            '    --input     i       Capture on network interface i' + newline() + \
            '    --output    av      Output "audio", "video" or "none". Default is audio & video' + newline() + \
-           '    --delay     ms      Delay audio by ms Milliseconds' + newline() + \
+           '    --delay     ms      Delay audio by ms milliseconds' + newline() + \
            '    --recvmac   MAC     Overide default MAC of transmitter' + newline() + \
            '    --transmit  IP      Overide default transmitter IP address' + newline() + \
            '    --receive   IP      Overide default receiver IP address' + newline() + \
            '    --ffmpeg    path    Path to FFmpeg' + newline() + \
            '    --ffmpegout args    Arguments to pass to FFmpeg' + newline() + \
-           '    --heartbeat         transmitts heartbeat on interface specified in --input. For standalone operation' + newline() + \
+           '    --heartbeat         Transmitts heartbeat on interface i. For standalone operation' + newline() + \
+           '    --help              Display this message' + newline() + \
             newline() + \
-           'Example: sudo python pycap.py --input en1 --delay 100 --heartbeat'
+           'Example: sudo python hdmicap.py --input en1 --delay 100 --heartbeat'
 
 
 def heartbeat_transmitter (TRANSMITTER_IP, RECEIVER_IP, HEARTBEAT_PORT, debug_level = None) :
@@ -486,7 +487,7 @@ def main (argv) :
     delay_ms = 0
 
     # default is for FFMPEG in same folder as Python script.
-    FFMPEG_BIN = "./ffmpeg"
+    ffmpeg_binary = "./ffmpeg"
 
     # Begin tokenizing arguements. Cast all to lower case
     for i in argv :
@@ -567,7 +568,7 @@ def main (argv) :
     if "--ffmpeg" in argv :
         # Passes raw string. NEED TO IMPLEMENT ERROR CHECKING/HANDLING
         # SO AS NOT TO ALLOW MALFORMED PATH VARIABLE
-        FFMPEG_BIN = argv[argv.index("--ffmpeg") + 1]
+        ffmpeg_binary = argv[argv.index("--ffmpeg") + 1]
 
     if "--ffmpegout" in argv :
         # Passes raw strin to ffmpeg. NEED TO IMPLEMENT ERROR CHECKING/HANDLING
@@ -646,7 +647,7 @@ def main (argv) :
     heartbeat_thread = multiprocessing.Process(target = heartbeat_transmitter, args = (transmitter_ip, input_source_ip, 48689, debug_level) )
     heartbeat_capture_thread = multiprocessing.Process(target = parse_packet, args = (input_source, "heartbeat", None, 0, debug_level) )
 
-    command = [FFMPEG_BIN,
+    command = [ffmpeg_binary,
            '-f', 's32be',
            '-ar', '48000',
            '-ac', '2',
@@ -682,10 +683,11 @@ def main (argv) :
 
 
     if output_method is not "none" :
+        # NEED BETTER ERROR HANDLING HERE. SCRIPT CAN QUIT BUT LEAVE SUBPROCESSES RUNNING
         try :
             ffmpeg_subprocess = subprocess.Popen(command, stdout = sys.stdout, stderr = sys.stderr)
         except Exception as e :
-            sys.stderr.write("Cannot find FFmpeg binary at " + FFMPEG_BIN + newline())
+            sys.stderr.write("Cannot find FFmpeg binary at " + ffmpeg_binary + newline())
             if debug_level is not None :
                 sys.stderr.write(error_header() + e[1] + newline())
             quit()
