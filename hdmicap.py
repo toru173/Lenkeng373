@@ -17,11 +17,9 @@ RANGE 192.168.0.0 /16, OR DEFAULT IP OF TRANSMITTER NEEDS TO BE CHANGED.
 
 TODO:
     - Write more complete help. Requires python-pcapy, python-netifaces to
-        be installed on fresh Debian install using apt-get
-    - Allow user-defined args for FFmpeg
+        be installed on fresh Debian install using apt-get - something for
+        GitHub?
     - Allow user overide of default MAC of receiver
-    - Write a good 'Help' function, to be activated when no ARGS passed
-        - Or when 'Help,' 'help,' '?,' 'H' or 'man' passed as args
     - test on PPC, x86, x86_64, OS X, *nix, VMs etc. BECAUSE OF MKFIFO,
       WILL NOT RUN ON WINDOWS. Although investigation needed
     - General clean up
@@ -59,8 +57,8 @@ except:
 
 
 @atexit.register
-def cleanup () :
-    # Close pipes at exit, no matter the exit state
+def exit_cleanup () :
+    # Close pipes at exit, no matter the exit state. Attempt to delete.
     try :
         os.unlink(audio_fifo_location)
         os.unlink(video_fifo_location)
@@ -83,8 +81,7 @@ def error_header () :
 
 
 def args_error () :
-    return 'Invalid Argument' + newline () + \
-            args_help()
+    return 'Invalid Argument. Run with --help for more assistance' + newline ()
 
 
 def args_help () :
@@ -169,7 +166,8 @@ def parse_packet (input_source, packet_type = None, fifo_location = None, delay_
     if packet_type == "video" :
     
         previous_frame_number = -1
-        previous_chunk = -1
+        previous_frame_chunk = -1
+        current_frame_chunk = -1
         previous_frame = ''
         current_frame = ''
         
@@ -177,33 +175,26 @@ def parse_packet (input_source, packet_type = None, fifo_location = None, delay_
     if packet_type == "audio" :
         # Calculate audio delay in number of packets. 992 bytes per packet (after header),
         # 4 bytes per sample, 48,000 * 2 channel samples per second.
-        # Approx 2.6 packets per millisecond. Prepopulate with '0x00000000'
+        # Approx 2.6 packets per millisecond. Prepopulate with '0x00'
+        # If delay_ms = 0, this becomes a single entry list. All logic still works correctly
         
-        if delay_ms > 0:
-            delay_packets = int((1000 / (48000/124)) * delay_ms)
-            # Write data package size - 16 byte header = 992 bytes of '0x00'
-            audio_delay_fifo = [('00'.decode('hex') * 992)] * (delay_packets + 1)
-            
-            audio_delay_fifo_top = delay_packets
-            audio_delay_fifo_read_pointer = 0
-            audio_delay_fifo_write_pointer = audio_delay_fifo_top
-
-        else :
-            # Set FIFO to single frame size
-            audio_delay_fifo = [('00'.decode('hex') * 992)]
-
-            audio_delay_fifo_top = 0
-            audio_delay_fifo_read_pointer = 0
-            audio_delay_fifo_write_pointer = audio_delay_fifo_top
-
+        delay_packets = int((1000 / (48000/124)) * delay_ms)
+        
+        # Write data package size - 16 byte header = 992 bytes of '0x00'
+        audio_delay_fifo = [('00'.decode('hex') * 992)] * (delay_packets + 1)
+        
+        audio_delay_fifo_top = delay_packets
+        audio_delay_fifo_read_pointer = 0
+        audio_delay_fifo_write_pointer = audio_delay_fifo_top
+    
 
     if fifo_location :
         if debug_level is not None :
-            sys.stderr.write("Attempting to open " + fifo_location + newline())
+            sys.stderr.write("[ " + time.ctime() + " ] Attempting to open " + fifo_location + newline())
         fifo = open(fifo_location, 'w')
         
         if debug_level is not None :
-            sys.stderr.write("Successfully opened " + fifo_location + " for writing" + newline())
+            sys.stderr.write("[ " + time.ctime() + " ] Successfully opened " + fifo_location + " for writing" + newline())
 
 
     current_timestamp = 0
@@ -211,7 +202,7 @@ def parse_packet (input_source, packet_type = None, fifo_location = None, delay_
     encoded_fps = 0
     
     if debug_level is not None :
-        sys.stderr.write("Capturing " + packet_type + " packets on interface " + input_source + newline())
+        sys.stderr.write("[ " + time.ctime() + " ] Capturing " + packet_type + " packets on interface " + input_source + newline())
 
 
     while 1 :
@@ -344,26 +335,28 @@ def parse_packet (input_source, packet_type = None, fifo_location = None, delay_
                     #    # Indicates dropped frame
                     #    current_frame += ('00'.decode('hex') * 1012) * (chunk_delta - 1)
                     
-                    
                     frame_number = unpack('>H', data[0 : 2])[0]
-                    frame_chunk = unpack('>H', data[2 : 4])[0]
+                    current_frame_chunk = unpack('>H', data[2 : 4])[0]
                     
                     last_chunk = 0
                     dropped_frame = 0
                     dropped_frame_error = ''
-
                     
-                    if frame_chunk > 32768 :
+                    if current_frame_chunk > 32768 :
                         # Last chunk (MSB set to 1). Set flag, adjust chunk number
                         last_chunk = 1
-                        frame_chunk = frame_chunk - 32768
-                
-                    if (frame_chunk != previous_chunk + 1) :
+                        current_frame_chunk = current_frame_chunk - 32768
+                    
+                    
+                    chunk_delta = current_frame_chunk - previous_frame_chunk
+
+
+                    if chunk_delta > 1 :
                         # Missed a chunk. Drop frame. Do not output partial frame.
                         dropped_frame = 1
                         dropped_frame_error = "missed a chunk. Current chunk is " + \
-                            str(frame_chunk) + ", previous chunk was " + \
-                                str(previous_chunk)
+                            str(current_frame_chunk) + ", previous chunk was " + \
+                                str(previous_frame_chunk)
                     
                     if (frame_number > previous_frame_number + 1) & (dropped_frame == 0) :
                         # Missed a frame. Drop this frame, and consider it the previous frame
@@ -374,9 +367,10 @@ def parse_packet (input_source, packet_type = None, fifo_location = None, delay_
                 
                     if dropped_frame == 1 :
                         # Action dropped frame, if necessary.
-                        if previous_chunk == -1 :
+                        if previous_frame_chunk == -1 :
                             pass
                         else :
+                            print chunk_delta
                             if previous_frame != '' :
                                 # Previously captured a frame. Write that frame to the FIFO instead of the dropped frame
                                 try:
@@ -389,12 +383,12 @@ def parse_packet (input_source, packet_type = None, fifo_location = None, delay_
                                 sys.stderr.write(error_header() + "Dropped frame, " + dropped_frame_error + newline())
                         previous_frame_number = frame_number
                         current_frame = ''
-                        previous_chunk = -1
+                        previous_frame_chunk = -1
                     
                     else :
                         # Add chunk to existing frame.
                         current_frame = current_frame + data[4 : ]
-                        previous_chunk = frame_chunk
+                        previous_frame_chunk = current_frame_chunk
             
                     if last_chunk & (dropped_frame == 0) :
                         # Successfully capture whole JPEG frame. Attempt to write to FIFO
@@ -407,7 +401,7 @@ def parse_packet (input_source, packet_type = None, fifo_location = None, delay_
                                 sys.stderr.write(error_header() + "Cannot write to video FIFO" + newline())
 
                         # Clean up
-                        previous_chunk = -1
+                        previous_frame_chunk = -1
                         previous_frame_number = frame_number
                         dropped_frame = 0
                         dropped_frame_error = ''
@@ -433,6 +427,8 @@ def parse_packet (input_source, packet_type = None, fifo_location = None, delay_
                         signal_present = "Yes"
                     else :
                         signal_present = "No"
+                    
+                    # NEED TO FIX THESE: ONLY OUTPUTS MESSAGE ONCE ERROR CORRECTED
                     
                     if signal_present == "No" :
                         sys.stderr.write("No HDMI signal detected" + newline())
@@ -523,9 +519,8 @@ def main (argv) :
         if argv[argv.index("--input") + 1] in netifaces.interfaces() :
             input_source = argv[argv.index("--input") + 1]
         else :
-            if debug_level is not None :
-                sys.stderr.write(args_error() + newline())
-                sys.stderr.write("Interface " + argv[argv.index("--input") + 1] + " not available" + newline())
+            sys.stderr.write(args_error() + newline())
+            sys.stderr.write("Interface " + argv[argv.index("--input") + 1] + " not available" + newline())
             quit()
 
     if "--output" in argv :
@@ -572,9 +567,9 @@ def main (argv) :
 
     if "--ffmpegout" in argv :
         # Passes raw strin to ffmpeg. NEED TO IMPLEMENT ERROR CHECKING/HANDLING
-        ffmpeg_output_string = argv[argv.index("--ffmpegout") + 1]
+        ffmpeg_output_args = [argv[argv.index("--ffmpegout") + 1]]
     else:
-        ffmpeg_output_string = 'udp://127.0.0.1:5010?ttl=1'
+        ffmpeg_output_args = ['udp://127.0.0.1:5010?ttl=1']
 
 
     # CREATE TWO PIPES USING OS.MKFIFO(), WRITES INFORMATION TO FFMPEG. INCOMPATIBLE WITH WINDOWS
@@ -647,25 +642,33 @@ def main (argv) :
     heartbeat_thread = multiprocessing.Process(target = heartbeat_transmitter, args = (transmitter_ip, input_source_ip, 48689, debug_level) )
     heartbeat_capture_thread = multiprocessing.Process(target = parse_packet, args = (input_source, "heartbeat", None, 0, debug_level) )
 
-    command = [ffmpeg_binary,
-           '-f', 's32be',
-           '-ar', '48000',
-           '-ac', '2',
-           '-i', '/tmp/audiofifo',
-           '-f', 'mjpeg',
-           '-i', '/tmp/videofifo',
-           '-f', 'mpegts',
-           '-qscale:a', '1',
-           '-qscale:v', '1',
-           ffmpeg_output_string]
+
+
+    ffmpeg_command = [ffmpeg_binary]
+
+    ffmpeg_audio_args = ['-f', 's32be',
+                         '-ar', '48000',
+                         '-ac', '2',
+                         '-i', '/tmp/audiofifo']
+
+    ffmpeg_video_args = ['-f', 'mjpeg',
+                         '-i', '/tmp/videofifo']
+        
+    ffmpeg_transcode_args = ['-f', 'mpegts',
+                             '-qscale:a', '1',
+                             '-qscale:v', '1']
 
     if output_method == "audio" :
+        ffmpeg_command += ffmpeg_audio_args
         audio_capture_thread.start()
 
     if output_method == "video" :
+        ffmpeg_command += ffmpeg_video_args
         video_capture_thread.start()
 
     if output_method == "audio and video" :
+        ffmpeg_command += ffmpeg_audio_args
+        ffmpeg_command += ffmpeg_video_args
         audio_capture_thread.start()
         video_capture_thread.start()
 
@@ -673,24 +676,44 @@ def main (argv) :
         # Don't start capture of anything. For testing heartbeat.
         pass
 
+    else:
+        ffmpeg_command += ffmpeg_transcode_args + ffmpeg_output_args
+
     heartbeat_capture_thread.start()
 
     if transmit_heartbeat == 1 :
         heartbeat_thread.start()
 
-    sys.stdout.write("Capturing input on interface " + input_source + ". Press Ctrl + C to abort" + newline())
-
-
 
     if output_method is not "none" :
         # NEED BETTER ERROR HANDLING HERE. SCRIPT CAN QUIT BUT LEAVE SUBPROCESSES RUNNING
         try :
-            ffmpeg_subprocess = subprocess.Popen(command, stdout = sys.stdout, stderr = sys.stderr)
+            ffmpeg_subprocess = subprocess.Popen(ffmpeg_command, stdout = sys.stdout, stderr = sys.stderr)
+            print ffmpeg_command
+
         except Exception as e :
-            sys.stderr.write("Cannot find FFmpeg binary at " + ffmpeg_binary + newline())
+            sys.stderr.write("Error when attempting to start FFmpeg at " + ffmpeg_binary + newline())
             if debug_level is not None :
-                sys.stderr.write(error_header() + e[1] + newline())
+                sys.stderr.write(error_header() + e[0] + newline())
+            
+            if output_method == "audio" :
+                audio_capture_thread.terminate()
+            
+            if output_method == "video" :
+                video_capture_thread.terminate()
+            
+            if output_method == "audio and video" :
+                audio_capture_thread.terminate()
+                video_capture_thread.terminate()
+
+            if transmit_heartbeat == 1 :
+                heartbeat_thread.terminate()
+
+            heartbeat_capture_thread.terminate()
+
             quit()
+
+    sys.stdout.write("Capturing input on interface " + input_source + ". Press Ctrl + C to abort" + newline())
 
     while 1:
         try :
@@ -700,26 +723,25 @@ def main (argv) :
             
             if output_method == "audio" :
                 audio_capture_thread.terminate()
-
+    
             if output_method == "video" :
                 video_capture_thread.terminate()
 
             if output_method == "audio and video" :
                 audio_capture_thread.terminate()
                 video_capture_thread.terminate()
-
+    
             if transmit_heartbeat == 1 :
                 heartbeat_thread.terminate()
 
             if output_method is not "none" :
                 ffmpeg_subprocess.terminate()
-
+    
             heartbeat_capture_thread.terminate()
-            
-            cleanup()
+
+            exit_cleanup()
 
             quit()
-
 
 if __name__ == "__main__" :
     main(sys.argv)
