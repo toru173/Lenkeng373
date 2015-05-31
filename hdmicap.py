@@ -135,8 +135,10 @@ def heartbeat_transmitter (TRANSMITTER_IP, RECEIVER_IP, HEARTBEAT_PORT, debug_le
         try:
             heartbeat_socket.sendto(message, (TRANSMITTER_IP, HEARTBEAT_PORT))
         except Exception as e :
+            sys.stderr.write("Cannot send heartbeat packet" + newline())
             if debug_level is not None :
-                sys.stderr.write(error_header() + e[0] + newline())
+                sys.stderr.write(error_header() + e[1] + newline())
+        
         time.sleep(1)
 
 
@@ -207,10 +209,16 @@ def parse_packet (input_source, packet_type = None, fifo_location = None, delay_
 
     while 1 :
 
-        # NEED TO PUT IN ERROR HANDLING in case of removing usb interface:
+        # NEED TO PUT IN ERROR HANDLING
         # PcapError: The interface went down
-        (header, packet) = capture.next()
-        
+        try:
+            (header, packet) = capture.next()
+        except Exception as e :
+            sys.stderr.write("The interface went down" + newline())
+            if debug_level is not None :
+                sys.stderr.write(error_header() + e[0] + newline())
+            time.sleep(1)
+
         #parse ethernet header
         eth_length = 14
         
@@ -689,8 +697,6 @@ def main (argv) :
         # NEED BETTER ERROR HANDLING HERE. SCRIPT CAN QUIT BUT LEAVE SUBPROCESSES RUNNING
         try :
             ffmpeg_subprocess = subprocess.Popen(ffmpeg_command, stdout = sys.stdout, stderr = sys.stderr)
-            print ffmpeg_command
-
         except Exception as e :
             sys.stderr.write("Error when attempting to start FFmpeg at " + ffmpeg_binary + newline())
             if debug_level is not None :
