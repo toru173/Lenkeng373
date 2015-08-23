@@ -3,9 +3,11 @@ Lenkeng373 capture script. See reverse engineering work conducted by Danman, htt
 
 Requirements: Requires Pcapy and netifaces packages. Must be run as root.
 Incompatible with Windows
+
+```
 Usage: hdmicapy.py [--input I] [--output AV] [--delay MS]
-                   [--recvmac MAC] [--transmit IP] [--receive IP]
-                   [--ffmpeg PATH] [--ffmpegout ARGS]
+				   [--recvmac MAC] [--transmit IP] [--receive IP]
+				   [--ffmpeg PATH] [--ffmpegout ARGS]
 --input     i       Capture on network interface i
 --output    av      Output "audio", "video" or "none". Default is audio & video
 --delay     ms      Delay audio by ms milliseconds
@@ -16,5 +18,7 @@ Usage: hdmicapy.py [--input I] [--output AV] [--delay MS]
 --ffmpegout args    Arguments to pass to FFmpeg
 --heartbeat         transmitts heartbeat on interface i. For standalone operation
 --help              Display this message
-
+```
 Example: sudo python hdmicap.py --input en1 --delay 100 --heartbeat
+
+
